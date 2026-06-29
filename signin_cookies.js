@@ -7,13 +7,13 @@
  * 在 QuantumultX 的 [rewrite_local] 中添加:
  *
  * # 哈士奇 - 捕获登录Cookie
- * ^https?://vip\.ioshashiqi\.com url script-response-header signin_cookies.js
+ * ^https?://vip\.ioshashiqi\.com url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/signin_cookies.js
  *
  * # IMYAI - 捕获JWT Token
- * ^https?://(super\.imyaigc\.com|api\.imyaigc\.com|api\.daka\.today) url script-response-header signin_cookies.js
+ * ^https?://(super\.imyaigc\.com|api\.imyaigc\.com|api\.daka\.today) url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/signin_cookies.js
  *
  * # 金蝶云社区 - 捕获VIP Cookie + CSRF Token
- * ^https?://vip\.kingdee\.com url script-response-header signin_cookies.js
+ * ^https?://vip\.kingdee\.com url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/signin_cookies.js
  *
  * 在 [task_local] 中添加:
  * 5 7 * * * all_signin.js
