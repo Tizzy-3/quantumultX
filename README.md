@@ -83,8 +83,6 @@ https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png
 打开“Daily Sign-in”面板，可以配置：
 
 - 企业微信 Webhook
-- IMYAI AES Key
-- IMYAI HMAC Key
 - 调试日志开关
 - 请求超时和重试次数
 - 自动捕获到的哈士奇 / IMYAI / 金蝶凭证
@@ -103,14 +101,8 @@ const USER_CONFIG = {
 
 如果你不需要企业微信推送，保持空字符串即可，脚本仍会发 Quantumult X 通知。
 
-IMYAI 加密密钥不再硬编码在源码里。需要你在 `qx_signin.js` 顶部填入：
-
-```js
-const USER_CONFIG = {
-  IMYAI_AES_KEY_B64: "你的 AES key",
-  IMYAI_HMAC_KEY_B64: "你的 HMAC key",
-};
-```
+IMYAI 接口加密用的 AES/HMAC key 已经内置在 `qx_signin.js`，不需要手动填写。
+你只需要确保登录 IMYAI 后自动捕获到 `QX_SIGNIN_IMYAI_JWT`。
 
 可选调试配置：
 
@@ -163,7 +155,7 @@ hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, api.imyaigc.co
 - `状态：未配置`：没有捕获到对应 cookie/token，重新登录对应网站。
 - `401`：cookie/token 过期，重新登录。
 - `哈士奇签到页面解析失败`：页面结构变化或 cookie 无效，需要重新登录后再试。
-- `IMYAI 未配置密钥`：补齐 `IMYAI_AES_KEY_B64` 和 `IMYAI_HMAC_KEY_B64`。
+- `IMYAI 未获取 JWT`：刷新 rewrite 订阅后重新登录 IMYAI，并进入首页或签到页触发 API 请求。
 - 没有通知：确认定时任务使用的是远程 raw 链接，并查看 Quantumult X 脚本日志。
 
 ## 注意事项

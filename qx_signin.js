@@ -19,8 +19,8 @@ const USER_CONFIG = {
   KINGDEE_COOKIE: "",
   KINGDEE_CSRF_TOKEN: "",
   WECOM_WEBHOOK_URL: "",
-  IMYAI_AES_KEY_B64: "",
-  IMYAI_HMAC_KEY_B64: "",
+  IMYAI_AES_KEY_B64: "iIADhhgDKPZfqgULT1eDJCkpzGSVs8dtP2RVVpxKV5g=",
+  IMYAI_HMAC_KEY_B64: "45fgZZoJMaNqJnlq1q+B999pHH3d92snBEzsMfi2FMyfrwoWqS9x7nYezRj3SnIxTrtmkBYIKfWJQSNJw6StgA==",
   DEBUG: "false",
   REQUEST_TIMEOUT_MS: "10000",
   REQUEST_RETRIES: "2",
@@ -168,6 +168,7 @@ async function signHashiqi() {
         }),
       });
       signed = containsAny(signResult.body, ["今日已签到", "签到成功", "signed"]);
+      reward = extractHashiqiReward(signResult.body) || reward;
     } else {
       throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
     }
@@ -181,8 +182,18 @@ async function signHashiqi() {
   });
   const total = match(userCenter.body, /balance-amount[^>]*>\s*([\d,]+)/i) ||
     match(userCenter.body, />(\d[\d,]*)\s*狗粮/);
-  const rewardMatch = match(userCenter.body, /奖励.*?(\d+)/);
-  reward = rewardMatch || "未知";
+  reward = reward || extractHashiqiReward(userCenter.body);
+  if (!reward && signed && !signedBefore) {
+    const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
+    const currentTotal = numberFromText(total);
+    if (currentTotal !== null && previousTotal !== null && currentTotal > previousTotal) {
+      reward = String(currentTotal - previousTotal);
+    }
+  }
+  if (total) {
+    setPref("QX_SIGNIN_HASHIQI_LAST_TOTAL", String(numberFromText(total) || total));
+  }
+  reward = reward || "未知";
 
   return {
     title: "🐶 哈士奇签到",
@@ -814,6 +825,13 @@ function assertHashiqiAuthenticatedPage(body) {
   }
 }
 
+function extractHashiqiReward(body) {
+  const text = String(body || "");
+  return match(text, /(?:奖励|获得|领取)[^\d+]{0,30}\+?(\d+)\s*(?:狗粮|积分)?/i) ||
+    match(text, /\+(\d+)\s*狗粮/i) ||
+    match(text, /狗粮[^\d+]{0,30}\+?(\d+)/i);
+}
+
 function isTruthyFlag(value) {
   if (value === true) {
     return true;
@@ -897,6 +915,15 @@ function valueOf(value, fallback) {
     return fallback === undefined ? 0 : fallback;
   }
   return value;
+}
+
+function numberFromText(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const found = String(value).replace(/,/g, "").match(/\d+/);
+  const number = Number(found ? found[0] : "");
+  return Number.isFinite(number) ? number : null;
 }
 
 function simpleHash(value) {

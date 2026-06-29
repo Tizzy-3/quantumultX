@@ -25,8 +25,6 @@
         "QX_SIGNIN_HASHIQI_USERNAME",
         "QX_SIGNIN_HASHIQI_PASSWORD",
         "QX_SIGNIN_IMYAI_JWT",
-        "QX_SIGNIN_IMYAI_AES_KEY_B64",
-        "QX_SIGNIN_IMYAI_HMAC_KEY_B64",
         "QX_SIGNIN_KINGDEE_COOKIE",
         "QX_SIGNIN_KINGDEE_CSRF_TOKEN",
         "QX_SIGNIN_KINGDEE_PRODUCT_LINE_ID",
@@ -45,23 +43,9 @@
           "desc": "可选。填写企业微信机器人 webhook，不填则只发 Quantumult X 通知。"
         },
         {
-          "id": "QX_SIGNIN_IMYAI_AES_KEY_B64",
-          "name": "IMYAI AES Key",
-          "val": "",
-          "type": "text",
-          "desc": "必填。IMYAI 加密请求使用的 AES base64 key。"
-        },
-        {
-          "id": "QX_SIGNIN_IMYAI_HMAC_KEY_B64",
-          "name": "IMYAI HMAC Key",
-          "val": "",
-          "type": "text",
-          "desc": "必填。IMYAI 请求签名使用的 HMAC base64 key。"
-        },
-        {
           "id": "QX_SIGNIN_DEBUG",
           "name": "调试日志",
-          "val": "false",
+          "val": false,
           "type": "boolean",
           "desc": "开启后会在 Quantumult X 日志里输出请求重试、部分失败原因等信息。"
         },
