@@ -91,58 +91,45 @@ async function signHashiqi() {
   const savedCookie = config("HASHIQI_COOKIE");
   const username = config("HASHIQI_USERNAME");
   const password = config("HASHIQI_PASSWORD");
+  const loginUrl = `${HASHIQI_BASE}/login.aspx`;
   if (savedCookie) {
     state.cookieJars.hashiqi = parseCookieString(savedCookie);
   } else if (!username || !password) {
     return skipped("🐶 哈士奇签到", "未获取 HASHIQI_COOKIE，也未配置账号密码");
   }
 
-  const loginUrl = `${HASHIQI_BASE}/login.aspx`;
   if (!savedCookie) {
-    const loginPage = await request({
-      url: loginUrl,
-      method: "GET",
-      jar: state.cookieJars.hashiqi,
-    });
-    const viewstate = match(loginPage.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
-    const generator = match(loginPage.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
-    if (!viewstate || !generator) {
-      throw new Error("Hashiqi login page did not include VIEWSTATE fields");
-    }
-
-    const loginResult = await request({
-      url: loginUrl,
-      method: "POST",
-      jar: state.cookieJars.hashiqi,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Requested-With": "XMLHttpRequest",
-        Origin: "https://vip.ioshashiqi.com",
-        Referer: loginUrl,
-      },
-      body: formEncode({
-        __VIEWSTATE: viewstate,
-        __VIEWSTATEGENERATOR: generator,
-        __EVENTTARGET: "btnLogin",
-        __EVENTARGUMENT: "",
-        txtUser_sign_in: username,
-        txtPwd_sign_in: password,
-      }),
-    });
-    assertHashiqiLoginSuccess(loginResult);
-    const loginCookie = cookieHeader(state.cookieJars.hashiqi);
-    if (loginCookie) {
-      setPref("QX_SIGNIN_HASHIQI_COOKIE", loginCookie);
-    }
+    await loginHashiqi(loginUrl, username, password);
   }
 
   const qiandaoUrl = `${HASHIQI_BASE}/qiandao.aspx`;
-  const qiandao = await request({
-    url: qiandaoUrl,
-    method: "GET",
-    jar: state.cookieJars.hashiqi,
-    headers: { Referer: loginUrl },
-  });
+  let qiandao = null;
+  try {
+    qiandao = await request({
+      url: qiandaoUrl,
+      method: "GET",
+      jar: state.cookieJars.hashiqi,
+      headers: { Referer: loginUrl },
+    });
+  } catch (error) {
+    if (isRedirectLoopError(error) && savedCookie && username && password) {
+      warnLog("Hashiqi saved cookie caused redirect loop, retrying with username/password login");
+      state.cookieJars.hashiqi = {};
+      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+      await loginHashiqi(loginUrl, username, password);
+      qiandao = await request({
+        url: qiandaoUrl,
+        method: "GET",
+        jar: state.cookieJars.hashiqi,
+        headers: { Referer: loginUrl },
+      });
+    } else if (isRedirectLoopError(error)) {
+      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+      throw new Error("哈士奇 Cookie 失效：访问签到页发生重定向循环，请重新打开网页登录以获取 Cookie");
+    } else {
+      throw error;
+    }
+  }
   assertHashiqiAuthenticatedPage(qiandao.body);
 
   const signedBefore = containsAny(qiandao.body, ["今日已签到", "class=\"signin-btn signed\""]);
@@ -853,6 +840,44 @@ function assertHashiqiAuthenticatedPage(body) {
   }
 }
 
+async function loginHashiqi(loginUrl, username, password) {
+  const loginPage = await request({
+    url: loginUrl,
+    method: "GET",
+    jar: state.cookieJars.hashiqi,
+  });
+  const viewstate = match(loginPage.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
+  const generator = match(loginPage.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
+  if (!viewstate || !generator) {
+    throw new Error("Hashiqi login page did not include VIEWSTATE fields");
+  }
+
+  const loginResult = await request({
+    url: loginUrl,
+    method: "POST",
+    jar: state.cookieJars.hashiqi,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Requested-With": "XMLHttpRequest",
+      Origin: "https://vip.ioshashiqi.com",
+      Referer: loginUrl,
+    },
+    body: formEncode({
+      __VIEWSTATE: viewstate,
+      __VIEWSTATEGENERATOR: generator,
+      __EVENTTARGET: "btnLogin",
+      __EVENTARGUMENT: "",
+      txtUser_sign_in: username,
+      txtPwd_sign_in: password,
+    }),
+  });
+  assertHashiqiLoginSuccess(loginResult);
+  const loginCookie = cookieHeader(state.cookieJars.hashiqi);
+  if (loginCookie) {
+    setPref("QX_SIGNIN_HASHIQI_COOKIE", loginCookie);
+  }
+}
+
 async function requestHashiqiHonor(referer) {
   return requestJson({
     url: `${HASHIQI_SITE}/ashx/Honor.ashx`,
@@ -1018,6 +1043,10 @@ function describeError(error) {
   } catch (jsonError) {
     return String(error);
   }
+}
+
+function isRedirectLoopError(error) {
+  return /too many redirections|too many redirects|redirect/i.test(describeError(error));
 }
 
 function simpleHash(value) {
