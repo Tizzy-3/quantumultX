@@ -12,6 +12,7 @@
 
 - `qx_signin.js`：定时签到主脚本。
 - `qx_cookie_capture.js`：登录网站时自动捕获 cookie/token 的 rewrite 脚本。
+- `qx_rewrite.conf`：rewrite 规则远程订阅文件（推荐用 rewrite_remote 一行订阅）。
 - `boxjs.json`：BoxJS 可视化配置面板。
 - `quantumultx.conf.example`：Quantumult X 配置示例。
 
@@ -26,7 +27,7 @@
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/boxjs.json`
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/patrick.png`
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png`
-3. 把 `quantumultx.conf.example` 里的 `[rewrite_local]`、`[task_remote]`、`[mitm]` 配置合并到你的 Quantumult X 配置。
+3. 把 `quantumultx.conf.example` 里的 `[rewrite_remote]`、`[task_remote]`、`[mitm]` 配置合并到你的 Quantumult X 配置。rewrite 规则推荐用远程订阅一行搞定，贴上去就行。
 4. 在 Quantumult X 中安装并信任 MITM 证书。
 5. 打开 Quantumult X 代理。
 6. 分别登录这些网站：
@@ -129,6 +130,15 @@ const USER_CONFIG = {
 ```
 
 ## Rewrite 和 MITM 示例
+
+推荐用 `[rewrite_remote]`，一行订阅，后续更新自动同步：
+
+```ini
+[rewrite_remote]
+https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_rewrite.conf, tag=每日签到Cookie捕获, enabled=true
+```
+
+如果 rewrite_remote 不可用，也可以手动逐条加到 `[rewrite_local]`：
 
 ```ini
 [rewrite_local]
