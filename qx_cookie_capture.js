@@ -76,7 +76,7 @@ function save(key, value, saved) {
 
 function notifyIfSaved(saved, title, subtitle, primaryKey) {
   if (saved.includes(primaryKey) && shouldNotify(primaryKey)) {
-    notify(title, subtitle, saved.join(", "));
+    notify(title, subtitle, "");
   }
 }
 
