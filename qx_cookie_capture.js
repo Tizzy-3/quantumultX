@@ -126,15 +126,49 @@ function extractJwt(authorization, cookie, responseBody) {
   if (fromCookie) {
     return fromCookie;
   }
+  const rawJwt = matchJwt(responseBody);
+  if (rawJwt) {
+    return rawJwt;
+  }
   try {
     const body = JSON.parse(responseBody || "{}");
-    return body.token ||
-      body.jwt ||
-      (body.data && (body.data.token || body.data.jwt || body.data.accessToken)) ||
-      "";
+    return findTokenValue(body) || "";
   } catch (error) {
     return "";
   }
+}
+
+function findTokenValue(value) {
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+  const tokenKeys = /^(token|jwt|access[_-]?token|auth[_-]?token|cross_domain_jwt)$/i;
+  for (const key of Object.keys(value)) {
+    const item = value[key];
+    if (tokenKeys.test(key) && typeof item === "string" && looksLikeToken(item)) {
+      return item;
+    }
+  }
+  for (const key of Object.keys(value)) {
+    const item = value[key];
+    if (item && typeof item === "object") {
+      const found = findTokenValue(item);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return "";
+}
+
+function looksLikeToken(value) {
+  const text = String(value || "").trim();
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(text) || text.length > 80;
+}
+
+function matchJwt(text) {
+  const found = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.exec(String(text || ""));
+  return found ? found[0] : "";
 }
 
 function extractCookieValue(cookie, name) {
@@ -240,6 +274,11 @@ function finish(message) {
     console.log(message);
   }
   if (typeof $done !== "undefined") {
-    $done({});
+    const res = typeof $response !== "undefined" ? $response : null;
+    if (res && typeof res.body === "string") {
+      $done({ body: res.body });
+    } else {
+      $done({});
+    }
   }
 }
