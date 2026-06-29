@@ -33,6 +33,7 @@ const USER_CONFIG = {
 const HASHIQI_BASE = "https://vip.ioshashiqi.com/aspx3/mobile";
 const IMYAI_API_BASE = "https://api.daka.today/api";
 const KINGDEE_VIP_BASE = "https://vip.kingdee.com";
+const IMYAI_DEFAULT_REWARD = "基础+50 / 高级+5 / 绘画+5";
 
 const state = {
   cookieJars: {
@@ -145,7 +146,7 @@ async function signHashiqi() {
 
   const signedBefore = containsAny(qiandao.body, ["今日已签到", "class=\"signin-btn signed\""]);
   let signed = signedBefore;
-  let reward = "";
+  let reward = extractHashiqiReward(qiandao.body);
 
   if (!signedBefore) {
     const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
@@ -192,6 +193,12 @@ async function signHashiqi() {
   }
   if (total) {
     setPref("QX_SIGNIN_HASHIQI_LAST_TOTAL", String(numberFromText(total) || total));
+  }
+  if (reward && reward !== "未知") {
+    setPref("QX_SIGNIN_HASHIQI_LAST_REWARD", reward);
+    setPref("QX_SIGNIN_HASHIQI_LAST_REWARD_DATE", todayString());
+  } else if (pref("QX_SIGNIN_HASHIQI_LAST_REWARD_DATE") === todayString()) {
+    reward = pref("QX_SIGNIN_HASHIQI_LAST_REWARD") || reward;
   }
   reward = reward || "未知";
 
@@ -245,6 +252,7 @@ async function signImyai() {
   }
 
   let signStatus = signedBefore ? "Already signed" : "Signed";
+  const beforeBalance = before && before.userBalance ? before.userBalance : {};
   if (!signedBefore) {
     const body = JSON.stringify(encryptImyaiPayload({}));
     try {
@@ -277,13 +285,24 @@ async function signImyai() {
     }
   }
 
-  let balance = before && before.userBalance ? before.userBalance : {};
+  let balance = beforeBalance;
   try {
     const after = await requestJson({ url: `${IMYAI_API_BASE}/auth/getInfo`, method: "GET", headers });
     balance = after && after.data && after.data.userBalance ? after.data.userBalance : balance;
     consecutiveDays = after && after.data && after.data.userInfo ? valueOf(after.data.userInfo.consecutiveDays, consecutiveDays) : consecutiveDays;
   } catch (error) {
     warnLog(`IMYAI getInfo after sign failed: ${error.message || error}`);
+  }
+
+  todayReward = todayReward || formatImyaiRewardDiff(beforeBalance, balance);
+  if (todayReward) {
+    setPref("QX_SIGNIN_IMYAI_LAST_REWARD", todayReward);
+    setPref("QX_SIGNIN_IMYAI_LAST_REWARD_DATE", todayString());
+  } else if (pref("QX_SIGNIN_IMYAI_LAST_REWARD_DATE") === todayString()) {
+    todayReward = pref("QX_SIGNIN_IMYAI_LAST_REWARD") || todayReward;
+  }
+  if (!todayReward && (signStatus === "Signed" || signStatus === "Already signed")) {
+    todayReward = IMYAI_DEFAULT_REWARD;
   }
 
   return {
@@ -827,7 +846,10 @@ function assertHashiqiAuthenticatedPage(body) {
 
 function extractHashiqiReward(body) {
   const text = String(body || "");
-  return match(text, /(?:奖励|获得|领取)[^\d+]{0,30}\+?(\d+)\s*(?:狗粮|积分)?/i) ||
+  return match(text, /addjifen["']?\s*[:=]\s*["']?(\d+)/i) ||
+    match(text, /addjifen1\s*=\s*[^;]*?(\d+)/i) ||
+    match(text, /today-reward[^>]*>\s*\+?(\d+)\s*狗粮/i) ||
+    match(text, /(?:奖励|获得|领取)[^\d+]{0,30}\+?(\d+)\s*(?:狗粮|积分)?/i) ||
     match(text, /\+(\d+)\s*狗粮/i) ||
     match(text, /狗粮[^\d+]{0,30}\+?(\d+)/i);
 }
@@ -866,6 +888,27 @@ function formatImyaiReward(result) {
     parts.push(`绘画+${drawing}`);
   }
   return parts.join(" / ");
+}
+
+function formatImyaiRewardDiff(beforeBalance, afterBalance) {
+  const diffs = [
+    ["基础", numberDiff(beforeBalance && beforeBalance.model3Count, afterBalance && afterBalance.model3Count)],
+    ["高级", numberDiff(beforeBalance && beforeBalance.model4Count, afterBalance && afterBalance.model4Count)],
+    ["绘画", numberDiff(beforeBalance && beforeBalance.drawMjCount, afterBalance && afterBalance.drawMjCount)],
+  ];
+  const parts = diffs
+    .filter((item) => item[1] !== null && item[1] > 0)
+    .map((item) => `${item[0]}+${item[1]}`);
+  return parts.join(" / ");
+}
+
+function numberDiff(before, after) {
+  const beforeNumber = numberFromText(before);
+  const afterNumber = numberFromText(after);
+  if (beforeNumber === null || afterNumber === null || afterNumber < beforeNumber) {
+    return null;
+  }
+  return afterNumber - beforeNumber;
 }
 
 function firstStringByKeys(obj, keys) {
