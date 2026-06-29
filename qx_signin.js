@@ -31,6 +31,7 @@ const USER_CONFIG = {
 };
 
 const HASHIQI_BASE = "https://vip.ioshashiqi.com/aspx3/mobile";
+const HASHIQI_SITE = "https://vip.ioshashiqi.com";
 const IMYAI_API_BASE = "https://api.daka.today/api";
 const KINGDEE_VIP_BASE = "https://vip.kingdee.com";
 const IMYAI_DEFAULT_REWARD = "基础+50 / 高级+5 / 绘画+5";
@@ -146,7 +147,14 @@ async function signHashiqi() {
 
   const signedBefore = containsAny(qiandao.body, ["今日已签到", "class=\"signin-btn signed\""]);
   let signed = signedBefore;
-  let reward = extractHashiqiReward(qiandao.body);
+  let reward = "";
+  let honor = null;
+  try {
+    honor = await requestHashiqiHonor(qiandaoUrl);
+    reward = extractHashiqiHonorReward(honor) || reward;
+  } catch (error) {
+    warnLog(`Hashiqi honor query failed: ${error.message || error}`);
+  }
 
   if (!signedBefore) {
     const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
@@ -170,6 +178,12 @@ async function signHashiqi() {
       });
       signed = containsAny(signResult.body, ["今日已签到", "签到成功", "signed"]);
       reward = extractHashiqiReward(signResult.body) || reward;
+      try {
+        honor = await requestHashiqiHonor(qiandaoUrl);
+        reward = extractHashiqiHonorReward(honor) || reward;
+      } catch (error) {
+        warnLog(`Hashiqi honor refresh failed: ${error.message || error}`);
+      }
     } else {
       throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
     }
@@ -844,11 +858,35 @@ function assertHashiqiAuthenticatedPage(body) {
   }
 }
 
+async function requestHashiqiHonor(referer) {
+  return requestJson({
+    url: `${HASHIQI_SITE}/ashx/Honor.ashx`,
+    method: "POST",
+    jar: state.cookieJars.hashiqi,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      Origin: HASHIQI_SITE,
+      Referer: referer,
+    },
+    body: formEncode({
+      control: "list",
+      nowmonth: String(new Date().getMonth() + 1),
+    }),
+  });
+}
+
+function extractHashiqiHonorReward(data) {
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+  const reward = numberFromText(data.addjifen);
+  return reward !== null && reward > 0 ? String(reward) : "";
+}
+
 function extractHashiqiReward(body) {
   const text = String(body || "");
-  return match(text, /addjifen["']?\s*[:=]\s*["']?(\d+)/i) ||
-    match(text, /addjifen1\s*=\s*[^;]*?(\d+)/i) ||
-    match(text, /today-reward[^>]*>\s*\+?(\d+)\s*狗粮/i) ||
+  return match(text, /today-reward[^>]*>\s*\+?(\d+)\s*狗粮/i) ||
     match(text, /(?:奖励|获得|领取)[^\d+]{0,30}\+?(\d+)\s*(?:狗粮|积分)?/i) ||
     match(text, /\+(\d+)\s*狗粮/i) ||
     match(text, /狗粮[^\d+]{0,30}\+?(\d+)/i);
