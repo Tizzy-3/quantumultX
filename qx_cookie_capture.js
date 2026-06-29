@@ -38,6 +38,8 @@ function capture() {
       if (jwt) {
         save("IMYAI_JWT", jwt, saved);
         notifyIfSaved(saved, "IMYAI", "获取token成功", "IMYAI_JWT");
+      } else {
+        debugLog(`IMYAI matched ${host}, but no JWT found. auth=${authorization ? "yes" : "no"}, cookie=${mergedCookie ? "yes" : "no"}, body=${res && res.body ? "yes" : "no"}`);
       }
     }
 
@@ -266,6 +268,12 @@ function setPref(key, value) {
 function notify(title, subtitle, body) {
   if (typeof $notify !== "undefined") {
     $notify(title, subtitle || "", body || "");
+  }
+}
+
+function debugLog(message) {
+  if (/^(1|true|yes|on)$/i.test(String(pref(`${PREFIX}DEBUG`) || "")) && typeof console !== "undefined" && console.log) {
+    console.log(`[QX_SIGNIN_CAPTURE] ${message}`);
   }
 }
 
