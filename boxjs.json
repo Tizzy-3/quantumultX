@@ -15,10 +15,10 @@
       "desc": "哈士奇 / IMYAI / 金蝶云社区自动签到配置",
       "author": "Tizzy3",
       "repo": "https://github.com/Tizzy-3/quantumultX",
-      "icon": "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do%20.png",
+      "icon": "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png",
       "icons": [
-        "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do%20.png",
-        "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do%20.png"
+        "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png",
+        "https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png"
       ],
       "keys": [
         "QX_SIGNIN_HASHIQI_COOKIE",

@@ -19,13 +19,13 @@
 
 1. 把 `qx_signin.js` 和 `qx_cookie_capture.js` 上传到 GitHub 仓库：
    `https://github.com/Tizzy-3/quantumultX`
-   如果使用 BoxJS，也上传 `boxjs.json`、订阅头像 `patrick.png` 和应用图标 `To-do .png`。
+   如果使用 BoxJS，也上传 `boxjs.json`、订阅头像 `patrick.png` 和应用图标 `To-do.png`。
 2. 确认这两个远程链接能打开：
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_signin.js`
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js`
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/boxjs.json`
    - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/patrick.png`
-   - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do%20.png`
+   - `https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png`
 3. 把 `quantumultx.conf.example` 里的 `[rewrite_local]`、`[task_remote]`、`[mitm]` 配置合并到你的 Quantumult X 配置。
 4. 在 Quantumult X 中安装并信任 MITM 证书。
 5. 打开 Quantumult X 代理。
@@ -76,10 +76,8 @@ https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/patrick.pn
 应用图标来自仓库根目录的：
 
 ```text
-https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do%20.png
+https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png
 ```
-
-所以需要把派大星图片命名为 `patrick.png`，把应用图标命名为 `To-do .png`，上传到 `Tizzy-3/quantumultX` 仓库 main 分支根目录。然后在 BoxJS 中删除旧订阅，重新添加订阅或刷新缓存。
 
 打开“Daily Sign-in”面板，可以配置：
 
