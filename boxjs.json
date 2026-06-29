@@ -1,0 +1,126 @@
+{
+  "id": "com.tizzy.quantumultx.signin",
+  "name": "每日签到",
+  "author": "Tizzy",
+  "repo": "https://github.com/Tizzy-3/quantumultX",
+  "icons": [
+    "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Check.png",
+    "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Check.png"
+  ],
+  "keys": [
+    "QX_SIGNIN_HASHIQI_COOKIE",
+    "QX_SIGNIN_HASHIQI_USERNAME",
+    "QX_SIGNIN_HASHIQI_PASSWORD",
+    "QX_SIGNIN_IMYAI_JWT",
+    "QX_SIGNIN_IMYAI_AES_KEY_B64",
+    "QX_SIGNIN_IMYAI_HMAC_KEY_B64",
+    "QX_SIGNIN_KINGDEE_COOKIE",
+    "QX_SIGNIN_KINGDEE_CSRF_TOKEN",
+    "QX_SIGNIN_KINGDEE_PRODUCT_LINE_ID",
+    "QX_SIGNIN_WECOM_WEBHOOK_URL",
+    "QX_SIGNIN_CRYPTOJS_URL",
+    "QX_SIGNIN_DEBUG",
+    "QX_SIGNIN_REQUEST_TIMEOUT_MS",
+    "QX_SIGNIN_REQUEST_RETRIES"
+  ],
+  "settings": [
+    {
+      "id": "QX_SIGNIN_WECOM_WEBHOOK_URL",
+      "name": "企业微信 Webhook",
+      "val": "",
+      "type": "text",
+      "desc": "可选。填写企业微信机器人 webhook，不填则只发 Quantumult X 通知。"
+    },
+    {
+      "id": "QX_SIGNIN_IMYAI_AES_KEY_B64",
+      "name": "IMYAI AES Key",
+      "val": "",
+      "type": "text",
+      "desc": "必填。IMYAI 加密请求使用的 AES base64 key。"
+    },
+    {
+      "id": "QX_SIGNIN_IMYAI_HMAC_KEY_B64",
+      "name": "IMYAI HMAC Key",
+      "val": "",
+      "type": "text",
+      "desc": "必填。IMYAI 请求签名使用的 HMAC base64 key。"
+    },
+    {
+      "id": "QX_SIGNIN_DEBUG",
+      "name": "调试日志",
+      "val": "false",
+      "type": "boolean",
+      "desc": "开启后会在 Quantumult X 日志里输出请求重试、部分失败原因等信息。"
+    },
+    {
+      "id": "QX_SIGNIN_REQUEST_TIMEOUT_MS",
+      "name": "请求超时毫秒",
+      "val": "10000",
+      "type": "number",
+      "desc": "单个请求超时时间，默认 10000。"
+    },
+    {
+      "id": "QX_SIGNIN_REQUEST_RETRIES",
+      "name": "请求重试次数",
+      "val": "2",
+      "type": "number",
+      "desc": "请求失败后的重试次数，默认 2，最大 5。"
+    },
+    {
+      "id": "QX_SIGNIN_HASHIQI_COOKIE",
+      "name": "哈士奇 Cookie",
+      "val": "",
+      "type": "textarea",
+      "desc": "通常由 qx_cookie_capture.js 自动写入。"
+    },
+    {
+      "id": "QX_SIGNIN_HASHIQI_USERNAME",
+      "name": "哈士奇账号",
+      "val": "",
+      "type": "text",
+      "desc": "可选。没有 Cookie 时用于账号密码登录。"
+    },
+    {
+      "id": "QX_SIGNIN_HASHIQI_PASSWORD",
+      "name": "哈士奇密码",
+      "val": "",
+      "type": "password",
+      "desc": "可选。没有 Cookie 时用于账号密码登录。"
+    },
+    {
+      "id": "QX_SIGNIN_IMYAI_JWT",
+      "name": "IMYAI JWT",
+      "val": "",
+      "type": "textarea",
+      "desc": "通常由 qx_cookie_capture.js 自动写入。"
+    },
+    {
+      "id": "QX_SIGNIN_KINGDEE_COOKIE",
+      "name": "金蝶 Cookie",
+      "val": "",
+      "type": "textarea",
+      "desc": "通常由 qx_cookie_capture.js 自动写入。"
+    },
+    {
+      "id": "QX_SIGNIN_KINGDEE_CSRF_TOKEN",
+      "name": "金蝶 CSRF Token",
+      "val": "",
+      "type": "text",
+      "desc": "通常由 qx_cookie_capture.js 自动写入。"
+    },
+    {
+      "id": "QX_SIGNIN_KINGDEE_PRODUCT_LINE_ID",
+      "name": "金蝶产品线 ID",
+      "val": "1",
+      "type": "number",
+      "desc": "默认 1。通常不需要修改。"
+    },
+    {
+      "id": "QX_SIGNIN_CRYPTOJS_URL",
+      "name": "CryptoJS CDN",
+      "val": "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js",
+      "type": "text",
+      "desc": "IMYAI 加密依赖。默认使用 cdnjs。"
+    }
+  ]
+}
