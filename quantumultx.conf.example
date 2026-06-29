@@ -1,0 +1,28 @@
+# Quantumult X 签到脚本配置示例
+#
+# 1. 把 qx_signin.js 和 qx_cookie_capture.js 放到 Quantumult X 能读取的位置：
+#    - 本地脚本
+#    - Raw GitHub URL
+#    - 你自己的 HTTP 文件地址
+#
+# 2. 先启用 rewrite_local 和 mitm，然后分别登录下面几个网站。
+#    登录请求经过 Quantumult X 时，qx_cookie_capture.js 会自动保存 cookie/token。
+#
+# 3. 最后启用 task_local 定时运行 qx_signin.js。
+
+[rewrite_local]
+^https:\/\/vip\.ioshashiqi\.com\/ url script-request-header qx_cookie_capture.js
+^https:\/\/super\.imyaigc\.com\/ url script-request-header qx_cookie_capture.js
+^https:\/\/api\.daka\.today\/ url script-request-header qx_cookie_capture.js
+^https:\/\/vip\.kingdee\.com\/ url script-request-header qx_cookie_capture.js
+
+[task_local]
+0 8 * * * qx_signin.js, tag=Daily Sign-in, img-url=checkmark.seal.system, enabled=true
+
+# 如果脚本放在远程地址，用 task_remote：
+#
+# [task_remote]
+# 0 8 * * * https://example.com/qx_signin.js, tag=Daily Sign-in, img-url=checkmark.seal.system, enabled=true
+
+[mitm]
+hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, vip.kingdee.com
