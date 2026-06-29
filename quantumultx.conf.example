@@ -1,0 +1,34 @@
+# Quantumult X 签到脚本配置示例（GitHub 远程脚本版）
+#
+# 1. 把 qx_signin.js、qx_cookie_capture.js、qx_rewrite.conf 上传到：
+#    https://github.com/Tizzy-3/quantumultX
+#    如果使用 BoxJS，也把 boxjs.json 上传到仓库根目录。
+#
+# 2. 先启用 rewrite 和 mitm，然后分别登录下面几个网站。
+#    登录响应经过 Quantumult X 时，qx_cookie_capture.js 会自动保存 cookie/token。
+#
+# 3. 最后启用 task_remote 定时运行 qx_signin.js。
+
+# ====== 推荐：rewrite_remote 一行订阅 ======
+[rewrite_remote]
+https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_rewrite.conf, tag=每日签到Cookie捕获, enabled=true
+
+# ====== 备用：rewrite_local 手动逐条添加 ======
+# 如果 rewrite_remote 不可用，贴下面内容到 [rewrite_local]：
+# [rewrite_local]
+# ^https:\/\/vip\.ioshashiqi\.com\/ url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/super\.imyaigc\.com\/ url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/api\.daka\.today\/ url script-request-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/api\.daka\.today\/ url script-response-body https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/api\.imyaigc\.com\/ url script-request-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/api\.imyaigc\.com\/ url script-response-body https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+# ^https:\/\/vip\.kingdee\.com\/ url script-response-header https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_cookie_capture.js
+
+[task_remote]
+0 8 * * * https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_signin.js, tag=Daily Sign-in, img-url=checkmark.seal.system, enabled=true
+
+[mitm]
+hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, api.imyaigc.com, vip.kingdee.com
+
+# BoxJS 订阅地址：
+# https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/boxjs.json

@@ -83,7 +83,7 @@ https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/To-do.png
 打开“Daily Sign-in”面板，可以配置：
 
 - 企业微信 Webhook
-- 调试日志开关
+- 调试日志（填 `true` 或 `false`）
 - 请求超时和重试次数
 - 自动捕获到的哈士奇 / IMYAI / 金蝶凭证
 

@@ -44,10 +44,10 @@
         },
         {
           "id": "QX_SIGNIN_DEBUG",
-          "name": "调试日志",
-          "val": false,
-          "type": "boolean",
-          "desc": "开启后会在 Quantumult X 日志里输出请求重试、部分失败原因等信息。"
+          "name": "调试日志 true/false",
+          "val": "false",
+          "type": "text",
+          "desc": "填 true 开启调试日志，填 false 关闭。开启后会在 Quantumult X 日志里输出请求重试、部分失败原因等信息。"
         },
         {
           "id": "QX_SIGNIN_REQUEST_TIMEOUT_MS",

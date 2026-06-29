@@ -82,7 +82,7 @@ async function runStep(name, fn) {
       id: name,
       title: STEP_TITLES[name] || name,
       status: "失败",
-      error: error && error.message ? error.message : String(error),
+      error: describeError(error),
     });
   }
 }
@@ -148,13 +148,6 @@ async function signHashiqi() {
   const signedBefore = containsAny(qiandao.body, ["今日已签到", "class=\"signin-btn signed\""]);
   let signed = signedBefore;
   let reward = "";
-  let honor = null;
-  try {
-    honor = await requestHashiqiHonor(qiandaoUrl);
-    reward = extractHashiqiHonorReward(honor) || reward;
-  } catch (error) {
-    warnLog(`Hashiqi honor query failed: ${error.message || error}`);
-  }
 
   if (!signedBefore) {
     const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
@@ -178,12 +171,6 @@ async function signHashiqi() {
       });
       signed = containsAny(signResult.body, ["今日已签到", "签到成功", "signed"]);
       reward = extractHashiqiReward(signResult.body) || reward;
-      try {
-        honor = await requestHashiqiHonor(qiandaoUrl);
-        reward = extractHashiqiHonorReward(honor) || reward;
-      } catch (error) {
-        warnLog(`Hashiqi honor refresh failed: ${error.message || error}`);
-      }
     } else {
       throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
     }
@@ -198,6 +185,12 @@ async function signHashiqi() {
   const total = match(userCenter.body, /balance-amount[^>]*>\s*([\d,]+)/i) ||
     match(userCenter.body, />(\d[\d,]*)\s*狗粮/);
   reward = reward || extractHashiqiReward(userCenter.body);
+  try {
+    const honor = await requestHashiqiHonor(qiandaoUrl);
+    reward = extractHashiqiHonorReward(honor) || reward;
+  } catch (error) {
+    warnLog(`Hashiqi honor query failed: ${describeError(error)}`);
+  }
   if (!reward && signed && !signedBefore) {
     const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
     const currentTotal = numberFromText(total);
@@ -660,18 +653,20 @@ async function request(options) {
       opts.headers.Cookie = cookie;
     }
   }
+  const shouldStoreCookies = opts.storeCookies !== false;
   const fetchOptions = Object.assign({}, opts);
   delete fetchOptions.jar;
+  delete fetchOptions.storeCookies;
   fetchOptions.timeout = requestTimeoutMs();
   const maxAttempts = requestRetries() + 1;
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       debugLog(`request attempt ${attempt}/${maxAttempts}: ${fetchOptions.method || "GET"} ${fetchOptions.url}`);
-      return await requestOnce(fetchOptions, opts.jar);
+      return await requestOnce(fetchOptions, opts.jar, shouldStoreCookies);
     } catch (error) {
       lastError = error;
-      warnLog(`request failed ${attempt}/${maxAttempts}: ${fetchOptions.url} ${error.message || error}`);
+      warnLog(`request failed ${attempt}/${maxAttempts}: ${fetchOptions.url} ${describeError(error)}`);
       if (attempt < maxAttempts) {
         await sleep(350 * attempt);
       }
@@ -680,7 +675,7 @@ async function request(options) {
   throw lastError;
 }
 
-function requestOnce(fetchOptions, jar) {
+function requestOnce(fetchOptions, jar, shouldStoreCookies) {
   return new Promise((resolve, reject) => {
     const task = typeof $task !== "undefined" ? $task : null;
     if (!task || typeof task.fetch !== "function") {
@@ -698,7 +693,7 @@ function requestOnce(fetchOptions, jar) {
       }
       settled = true;
       clearTimeout(timeout);
-      if (jar) {
+      if (jar && shouldStoreCookies) {
         storeCookies(jar, response.headers || {});
       }
       const status = Number(response.statusCode || response.status || 0);
@@ -863,6 +858,7 @@ async function requestHashiqiHonor(referer) {
     url: `${HASHIQI_SITE}/ashx/Honor.ashx`,
     method: "POST",
     jar: state.cookieJars.hashiqi,
+    storeCookies: false,
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
       "X-Requested-With": "XMLHttpRequest",
@@ -1005,6 +1001,23 @@ function numberFromText(value) {
   const found = String(value).replace(/,/g, "").match(/\d+/);
   const number = Number(found ? found[0] : "");
   return Number.isFinite(number) ? number : null;
+}
+
+function describeError(error) {
+  if (!error) {
+    return "未知错误";
+  }
+  if (error.message) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch (jsonError) {
+    return String(error);
+  }
 }
 
 function simpleHash(value) {
