@@ -69,7 +69,7 @@ function save(key, value, saved) {
   const prefKey = `${PREFIX}${key}`;
   const oldValue = normalizeStoredValue(key, pref(prefKey));
   const newValue = normalizeStoredValue(key, value);
-  if (newValue && newValue !== oldValue && setPref(prefKey, value)) {
+  if (newValue && newValue !== oldValue && setPref(prefKey, newValue)) {
     saved.push(key);
   }
 }
