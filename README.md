@@ -49,7 +49,7 @@ https://super.imyaigc.com
 https://vip.kingdee.com
 ```
 
-捕获成功后会收到通知：
+获取成功后会收到通知：
 
 ```text
 哈士奇 / 获取cookies成功
