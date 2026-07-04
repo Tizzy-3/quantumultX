@@ -312,11 +312,11 @@ async function signKingdee() {
   if (!cookie) {
     return skipped("🌐 金蝶云社区签到", "未获取 KINGDEE_COOKIE，请重新登录金蝶云社区");
   }
-  const csrf = config("KINGDEE_CSRF_TOKEN") || parseCookieString(cookie)["V-CSRF-TOKEN"] || "";
+  const jar = parseCookieString(cookie);
+  const csrf = config("KINGDEE_CSRF_TOKEN") || jar["V-CSRF-TOKEN"] || "";
   const productLineId = config("KINGDEE_PRODUCT_LINE_ID") || "1";
   const headers = {
     "User-Agent": userAgent(),
-    Cookie: cookie,
     "X-CSRF-TOKEN": csrf || "",
     "V-CSRF-TOKEN": csrf || "",
     "X-Requested-With": "XMLHttpRequest",
@@ -330,7 +330,7 @@ async function signKingdee() {
   let coins = "unknown";
   let days = "unknown";
   try {
-    const monthResult = await requestJson({ url: month, method: "GET", headers });
+    const monthResult = await requestJson({ url: month, method: "GET", headers, jar });
     coins = valueOf(monthResult.currentCoins, coins);
     days = valueOf(monthResult.consistentDays, days);
   } catch (error) {
@@ -340,7 +340,7 @@ async function signKingdee() {
   let status = "Signed";
   let todayCoins = 0;
   try {
-    const check = await requestJson({ url: `${KINGDEE_VIP_BASE}/api/checkins/status`, method: "GET", headers });
+    const check = await requestJson({ url: `${KINGDEE_VIP_BASE}/api/checkins/status`, method: "GET", headers, jar });
     if (check.checkIn) {
       status = "Already signed";
       todayCoins = valueOf(check.coins, 0);
@@ -349,6 +349,7 @@ async function signKingdee() {
         url: `${KINGDEE_VIP_BASE}/api/checkins`,
         method: "POST",
         headers,
+        jar,
         body: "{}",
       });
       if (sign.errorCode && sign.errorCode !== 409 && !/signed|已签/i.test(sign.message || "")) {
@@ -367,13 +368,18 @@ async function signKingdee() {
     }
   }
 
-  const lottery = await runKingdeeLottery(headers);
+  const lottery = await runKingdeeLottery(headers, jar);
   try {
-    const monthResult = await requestJson({ url: month, method: "GET", headers });
+    const monthResult = await requestJson({ url: month, method: "GET", headers, jar });
     coins = valueOf(monthResult.currentCoins, coins);
     days = valueOf(monthResult.consistentDays, days);
   } catch (error) {
     // Non-critical refresh.
+  }
+
+  const updatedCookie = cookieHeader(jar);
+  if (updatedCookie && updatedCookie !== cookie) {
+    setPref("QX_SIGNIN_KINGDEE_COOKIE", updatedCookie);
   }
 
   return {
@@ -385,12 +391,13 @@ async function signKingdee() {
   };
 }
 
-async function runKingdeeLottery(headers) {
+async function runKingdeeLottery(headers, jar) {
   try {
     await request({
       url: `${KINGDEE_VIP_BASE}/lottery/LuckyLottery?sid=sign`,
       method: "GET",
       headers,
+      jar,
     });
   } catch (error) {
     // This page warms the activity session; continue if it fails.
@@ -401,6 +408,7 @@ async function runKingdeeLottery(headers) {
       url: `${KINGDEE_VIP_BASE}/activityapi/activities/code/sign`,
       method: "GET",
       headers,
+      jar,
     });
     if (activity.errorCode) {
       return `activity failed: ${activity.message || activity.errorCode}`;
@@ -421,6 +429,7 @@ async function runKingdeeLottery(headers) {
       url: `${KINGDEE_VIP_BASE}/activityapi/me/activities/${activityId}/lottery/${lotteryId}/lottery-draw-times`,
       method: "GET",
       headers,
+      jar,
     });
     const drawnToday = Number(times.hasDrawnTimesDay || 0);
     if (maxDay - drawnToday > 0) {
@@ -428,6 +437,7 @@ async function runKingdeeLottery(headers) {
         url: `${KINGDEE_VIP_BASE}/activityapi/activities/${activityId}/lottery/${lotteryId}/draw`,
         method: "POST",
         headers,
+        jar,
         body: JSON.stringify({ activityId, lotteryId }),
       });
       if (draw.errorCode) {
@@ -443,6 +453,7 @@ async function runKingdeeLottery(headers) {
       url: `${KINGDEE_VIP_BASE}/activityapi/me/activities/${activityId}/lottery-draw-records?page=0&pageSize=5`,
       method: "GET",
       headers,
+      jar,
     });
     const today = todayString();
     const list = Array.isArray(records.content) ? records.content : [];
