@@ -443,9 +443,9 @@ async function runKingdeeLottery(headers, jar) {
       if (draw.errorCode) {
         return `draw failed: ${draw.message || draw.errorCode}`;
       }
-      const prize = draw.prize || draw;
-      const name = prize.name || draw.prizeName || "unknown prize";
-      const coins = Number(prize.coins || draw.coins || 0);
+      const prize = draw.prize || (draw.data && draw.data.prize) || draw;
+      const name = prize.name || draw.prizeName || (draw.data && draw.data.prizeName) || "unknown prize";
+      const coins = Number(prize.coins || draw.coins || (draw.data && draw.data.coins) || 0);
       return coins > 0 ? `${name} (+${coins})` : name;
     }
 
