@@ -103,64 +103,90 @@ async function signHashiqi() {
   }
 
   const qiandaoUrl = `${HASHIQI_BASE}/qiandao.aspx`;
-  let qiandao = null;
+
+  // 1) 用 Honor.ashx 拿到服务端真实的签到状态
+  let honor = null;
   try {
-    qiandao = await request({
-      url: qiandaoUrl,
-      method: "GET",
-      jar: state.cookieJars.hashiqi,
-      headers: { Referer: loginUrl },
-    });
+    honor = await requestHashiqiHonor(loginUrl);
   } catch (error) {
-    if (isRedirectLoopError(error) && savedCookie && username && password) {
-      warnLog("Hashiqi saved cookie caused redirect loop, retrying with username/password login");
-      state.cookieJars.hashiqi = {};
-      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
-      await loginHashiqi(loginUrl, username, password);
+    warnLog(`Hashiqi initial honor query failed: ${describeError(error)}`);
+  }
+  const signedBefore = isHashiqiSignedToday(honor);
+  let signed = signedBefore;
+  let reward = "";
+  let lastSignError = null;
+
+  if (!signedBefore) {
+    // 2) 没签到，去 qiandao 页面拿 VIEWSTATE 并 POST
+    let qiandao = null;
+    try {
       qiandao = await request({
         url: qiandaoUrl,
         method: "GET",
         jar: state.cookieJars.hashiqi,
         headers: { Referer: loginUrl },
       });
-    } else if (isRedirectLoopError(error)) {
-      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
-      throw new Error("哈士奇 Cookie 失效：访问签到页发生重定向循环，请重新打开网页登录以获取 Cookie");
-    } else {
-      throw error;
+    } catch (error) {
+      if (isRedirectLoopError(error) && savedCookie && username && password) {
+        warnLog("Hashiqi saved cookie caused redirect loop, retrying with username/password login");
+        state.cookieJars.hashiqi = {};
+        setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+        await loginHashiqi(loginUrl, username, password);
+        qiandao = await request({
+          url: qiandaoUrl,
+          method: "GET",
+          jar: state.cookieJars.hashiqi,
+          headers: { Referer: loginUrl },
+        });
+      } else if (isRedirectLoopError(error)) {
+        setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+        throw new Error("哈士奇 Cookie 失效：访问签到页发生重定向循环，请重新打开网页登录以获取 Cookie");
+      } else {
+        throw error;
+      }
     }
-  }
-  assertHashiqiAuthenticatedPage(qiandao.body);
+    assertHashiqiAuthenticatedPage(qiandao.body);
 
-  const signedBefore = containsAny(qiandao.body, ["今日已签到", "class=\"signin-btn signed\""]);
-  let signed = signedBefore;
-  let reward = "";
-
-  if (!signedBefore) {
     const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
     const qdGenerator = match(qiandao.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
-    if (qdViewstate && qdGenerator) {
-      const signResult = await request({
-        url: qiandaoUrl,
-        method: "POST",
-        jar: state.cookieJars.hashiqi,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-Requested-With": "XMLHttpRequest",
-          Referer: qiandaoUrl,
-        },
-        body: formEncode({
-          __VIEWSTATE: qdViewstate,
-          __VIEWSTATEGENERATOR: qdGenerator,
-          __EVENTTARGET: "_lbtqd",
-          __EVENTARGUMENT: "",
-        }),
-      });
-      signed = containsAny(signResult.body, ["今日已签到", "签到成功", "signed"]);
-      reward = extractHashiqiReward(signResult.body) || reward;
-    } else {
+    if (!qdViewstate || !qdGenerator) {
       throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
     }
+
+    const signResult = await request({
+      url: qiandaoUrl,
+      method: "POST",
+      jar: state.cookieJars.hashiqi,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: qiandaoUrl,
+      },
+      body: formEncode({
+        __VIEWSTATE: qdViewstate,
+        __VIEWSTATEGENERATOR: qdGenerator,
+        __EVENTTARGET: "_lbtqd",
+        __EVENTARGUMENT: "",
+      }),
+    });
+    reward = extractHashiqiReward(signResult.body) || reward;
+
+    // 3) POST 完再调一次 Honor.ashx，验证服务端是否真的更新了状态
+    try {
+      const afterHonor = await requestHashiqiHonor(qiandaoUrl);
+      signed = isHashiqiSignedToday(afterHonor);
+      if (signed) {
+        reward = extractHashiqiHonorReward(afterHonor) || reward;
+      } else {
+        lastSignError = "POST 后 Honor.ashx 仍显示未签到，签到请求可能未生效（验证码/会话过期/参数错误）";
+      }
+    } catch (error) {
+      lastSignError = `POST 后验证失败：${describeError(error)}`;
+      warnLog(`Hashiqi post-sign honor verification failed: ${lastSignError}`);
+    }
+  } else {
+    // 已签到，从首次 honor 拿奖励
+    reward = extractHashiqiHonorReward(honor) || reward;
   }
 
   const userCenter = await request({
@@ -172,12 +198,6 @@ async function signHashiqi() {
   const total = match(userCenter.body, /balance-amount[^>]*>\s*([\d,]+)/i) ||
     match(userCenter.body, />(\d[\d,]*)\s*狗粮/);
   reward = reward || extractHashiqiReward(userCenter.body);
-  try {
-    const honor = await requestHashiqiHonor(qiandaoUrl);
-    reward = extractHashiqiHonorReward(honor) || reward;
-  } catch (error) {
-    warnLog(`Hashiqi honor query failed: ${describeError(error)}`);
-  }
   if (!reward && signed && !signedBefore) {
     const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
     const currentTotal = numberFromText(total);
@@ -198,9 +218,10 @@ async function signHashiqi() {
 
   return {
     title: "🐶 哈士奇签到",
-    status: signed ? "成功" : "未知",
+    status: signed ? "成功" : (lastSignError ? "失败" : "未签到"),
     reward: reward === "未知" ? "未知" : `+${reward}`,
     total: total || "未知",
+    error: signed ? "" : lastSignError,
   };
 }
 
@@ -914,6 +935,23 @@ function extractHashiqiHonorReward(data) {
   }
   const reward = numberFromText(data.addjifen);
   return reward !== null && reward > 0 ? String(reward) : "";
+}
+
+function isHashiqiSignedToday(data) {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const flag = data.signedToday;
+  if (flag === true || flag === "True" || flag === "true" || flag === 1 || flag === "1") {
+    return true;
+  }
+  if (flag === false || flag === "False" || flag === "false" || flag === 0 || flag === "0") {
+    return false;
+  }
+  if (Array.isArray(data.signedDates)) {
+    return data.signedDates.indexOf(todayString()) >= 0;
+  }
+  return false;
 }
 
 function extractHashiqiReward(body) {
