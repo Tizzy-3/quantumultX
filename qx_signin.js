@@ -178,7 +178,8 @@ async function signHashiqi() {
         __EVENTARGUMENT: "",
       }),
     });
-    reward = extractHashiqiReward(signResult.body) || reward;
+    postReward = extractHashiqiReward(signResult.body);
+    reward = postReward || reward;
 
     // 4) POST 完再调一次 Honor.ashx，验证服务端是否真的更新了状态
     try {
@@ -213,6 +214,11 @@ async function signHashiqi() {
   reward = reward || extractHashiqiReward(userCenter.body);
   const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
   const currentTotal = numberFromText(total);
+  if (!signed && !signedBefore && currentTotal !== null && numberFromText(postReward) > 0) {
+    // POST 已返回本次奖励且用户中心可读，说明奖励已入账；Honor 可能仍有缓存。
+    signed = true;
+    lastSignError = null;
+  }
   if (currentTotal !== null && previousTotal !== null && currentTotal > previousTotal) {
     const increasedBy = currentTotal - previousTotal;
     if (!reward) {
