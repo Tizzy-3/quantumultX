@@ -211,11 +211,18 @@ async function signHashiqi() {
   const total = match(userCenter.body, /balance-amount[^>]*>\s*([\d,]+)/i) ||
     match(userCenter.body, />(\d[\d,]*)\s*狗粮/);
   reward = reward || extractHashiqiReward(userCenter.body);
-  if (!reward && signed && !signedBefore) {
-    const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
-    const currentTotal = numberFromText(total);
-    if (currentTotal !== null && previousTotal !== null && currentTotal > previousTotal) {
-      reward = String(currentTotal - previousTotal);
+  const previousTotal = numberFromText(pref("QX_SIGNIN_HASHIQI_LAST_TOTAL"));
+  const currentTotal = numberFromText(total);
+  if (currentTotal !== null && previousTotal !== null && currentTotal > previousTotal) {
+    const increasedBy = currentTotal - previousTotal;
+    if (!reward) {
+      reward = String(increasedBy);
+    }
+    // 新站点可能先入账狗粮，再延迟更新 Honor.ashx。
+    // 余额确实增加时，用服务端余额变化作为签到成功兜底。
+    if (!signed && !signedBefore && numberFromText(reward) > 0) {
+      signed = true;
+      lastSignError = null;
     }
   }
   if (total) {
