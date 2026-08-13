@@ -28,7 +28,7 @@ https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_rewrite
 0 8 * * * https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_signin.js, tag=Daily Sign-in, img-url=checkmark.seal.system, enabled=true
 
 [mitm]
-hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, api.imyaigc.com, vip.kingdee.com
+hostname = www.haxiaohaios2.com, super.imyaigc.com, api.daka.today, api.imyaigc.com, vip.kingdee.com
 
 # BoxJS 订阅地址：
 # https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/boxjs.json

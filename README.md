@@ -33,7 +33,7 @@ https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_rewrite
 0 8 * * * https://raw.githubusercontent.com/Tizzy-3/quantumultX/refs/heads/main/qx_signin.js, tag=Daily Sign-in, img-url=checkmark.seal.system, enabled=true
 
 [mitm]
-hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, api.imyaigc.com, vip.kingdee.com
+hostname = www.haxiaohaios2.com, super.imyaigc.com, api.daka.today, api.imyaigc.com, vip.kingdee.com
 ```
 
 在 Quantumult X 中完成以下操作：
@@ -44,12 +44,12 @@ hostname = vip.ioshashiqi.com, super.imyaigc.com, api.daka.today, api.imyaigc.co
 4. 分别登录以下网站。
 
 ```text
-https://vip.ioshashiqi.com
+https://www.haxiaohaios2.com
 https://super.imyaigc.com
 https://vip.kingdee.com
 ```
 
-获取成功后会收到通知：
+捕获成功后会收到通知：
 
 ```text
 哈士奇 / 获取cookies成功

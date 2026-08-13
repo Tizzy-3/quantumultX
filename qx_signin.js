@@ -30,8 +30,8 @@ const USER_CONFIG = {
   KINGDEE_PRODUCT_LINE_ID: "1",
 };
 
-const HASHIQI_BASE = "https://vip.ioshashiqi.com/aspx3/mobile";
-const HASHIQI_SITE = "https://vip.ioshashiqi.com";
+const HASHIQI_BASE = "https://www.haxiaohaios2.com/aspx3/mobile";
+const HASHIQI_SITE = "https://www.haxiaohaios2.com";
 const IMYAI_API_BASE = "https://api.daka.today/api";
 const KINGDEE_VIP_BASE = "https://vip.kingdee.com";
 const IMYAI_DEFAULT_REWARD = "基础+50 / 高级+5 / 绘画+5";
@@ -904,7 +904,7 @@ async function loginHashiqi(loginUrl, username, password) {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       "X-Requested-With": "XMLHttpRequest",
-      Origin: "https://vip.ioshashiqi.com",
+      Origin: "https://www.haxiaohaios2.com",
       Referer: loginUrl,
     },
     body: formEncode({

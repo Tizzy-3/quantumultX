@@ -28,7 +28,7 @@ function capture() {
     const authorization = reqHeaders.authorization || "";
 
     const saved = [];
-    if (host === "vip.ioshashiqi.com" && mergedCookie) {
+    if (host === "www.haxiaohaios2.com" && mergedCookie) {
       save("HASHIQI_COOKIE", mergedCookie, saved);
       notifyIfSaved(saved, "哈士奇", "获取cookies成功", "HASHIQI_COOKIE");
     }
