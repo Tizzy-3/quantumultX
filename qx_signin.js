@@ -104,11 +104,47 @@ async function signHashiqi() {
 
   const qiandaoUrl = `${HASHIQI_BASE}/qiandao.aspx`;
 
-  // 1) 用 Honor.ashx 拿到服务端真实的签到状态
-  let honor = null;
+  // 1) 先访问签到页确认会话和站点状态。
+  // 未登录时 Honor.ashx 可能返回 GenericErrorPage，不能据此判断“未签到”。
+  let qiandao = null;
   try {
-    honor = await requestHashiqiHonor(loginUrl);
+    qiandao = await request({
+      url: qiandaoUrl,
+      method: "GET",
+      jar: state.cookieJars.hashiqi,
+      headers: { Referer: loginUrl },
+    });
   } catch (error) {
+    if (isRedirectLoopError(error) && savedCookie && username && password) {
+      warnLog("Hashiqi saved cookie caused redirect loop, retrying with username/password login");
+      state.cookieJars.hashiqi = {};
+      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+      await loginHashiqi(loginUrl, username, password);
+      qiandao = await request({
+        url: qiandaoUrl,
+        method: "GET",
+        jar: state.cookieJars.hashiqi,
+        headers: { Referer: loginUrl },
+      });
+    } else if (isRedirectLoopError(error)) {
+      setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+      throw new Error("哈士奇 Cookie 失效：访问签到页发生重定向循环，请重新打开网页登录以获取 Cookie");
+    } else {
+      throw error;
+    }
+  }
+  assertHashiqiAuthenticatedPage(qiandao.body);
+  if (/GenericErrorPage\.htm|Server Error|应用程序中的服务器错误/i.test(String(qiandao.body || ""))) {
+    throw new Error("哈士奇签到页返回服务器错误：网站端 qiandao.aspx 当前异常");
+  }
+
+  // 2) 页面可用后，再从 Honor.ashx 读取服务端真实签到状态。
+  let honor = null;
+  let honorError = null;
+  try {
+    honor = await requestHashiqiHonor(qiandaoUrl);
+  } catch (error) {
+    honorError = error;
     warnLog(`Hashiqi initial honor query failed: ${describeError(error)}`);
   }
   const signedBefore = isHashiqiSignedToday(honor);
@@ -117,35 +153,8 @@ async function signHashiqi() {
   let lastSignError = null;
 
   if (!signedBefore) {
-    // 2) 没签到，去 qiandao 页面拿 VIEWSTATE 并 POST
-    let qiandao = null;
-    try {
-      qiandao = await request({
-        url: qiandaoUrl,
-        method: "GET",
-        jar: state.cookieJars.hashiqi,
-        headers: { Referer: loginUrl },
-      });
-    } catch (error) {
-      if (isRedirectLoopError(error) && savedCookie && username && password) {
-        warnLog("Hashiqi saved cookie caused redirect loop, retrying with username/password login");
-        state.cookieJars.hashiqi = {};
-        setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
-        await loginHashiqi(loginUrl, username, password);
-        qiandao = await request({
-          url: qiandaoUrl,
-          method: "GET",
-          jar: state.cookieJars.hashiqi,
-          headers: { Referer: loginUrl },
-        });
-      } else if (isRedirectLoopError(error)) {
-        setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
-        throw new Error("哈士奇 Cookie 失效：访问签到页发生重定向循环，请重新打开网页登录以获取 Cookie");
-      } else {
-        throw error;
-      }
-    }
-    assertHashiqiAuthenticatedPage(qiandao.body);
+
+    // 3) 未签到时提交签到表单，并用 Honor.ashx 验证结果。
 
     const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
     const qdGenerator = match(qiandao.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
@@ -171,7 +180,7 @@ async function signHashiqi() {
     });
     reward = extractHashiqiReward(signResult.body) || reward;
 
-    // 3) POST 完再调一次 Honor.ashx，验证服务端是否真的更新了状态
+    // 4) POST 完再调一次 Honor.ashx，验证服务端是否真的更新了状态
     try {
       const afterHonor = await requestHashiqiHonor(qiandaoUrl);
       signed = isHashiqiSignedToday(afterHonor);
@@ -187,6 +196,10 @@ async function signHashiqi() {
   } else {
     // 已签到，从首次 honor 拿奖励
     reward = extractHashiqiHonorReward(honor) || reward;
+  }
+
+  if (!honor && honorError && !signed) {
+    lastSignError = lastSignError || `哈士奇签到状态接口异常：${describeError(honorError)}`;
   }
 
   const userCenter = await request({
