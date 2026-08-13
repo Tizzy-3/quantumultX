@@ -350,7 +350,7 @@ async function signImyai() {
     title: `🤖 IMYAI签到（连续${consecutiveDays}天）`,
     status: signStatus === "Signed" || signStatus === "Already signed" ? "已签到" : signStatus,
     todayReward: todayReward || "未知",
-    points: `基础${valueOf(balance.model3Count, "未知")} / 高级${valueOf(balance.model4Count, "未知")} / 绘画${valueOf(balance.drawMjCount, "未知")}`,
+    points: formatImyaiPoints(balance),
   };
 }
 
@@ -998,6 +998,13 @@ function isTruthyFlag(value) {
   return /^(1|true|yes|signed|已签|已签到)$/i.test(String(value || "").trim());
 }
 
+function formatImyaiPoints(balance) {
+  const source = balance && typeof balance === "object" ? balance : {};
+  const base = firstNumberByKeys(source, ["model3Count", "model3_count", "model3Balance", "basicCount", "baseCount", "basePoints"]);
+  const advanced = firstNumberByKeys(source, ["model4Count", "model4_count", "model4Balance", "advancedCount", "premiumCount", "advancedPoints"]);
+  const drawing = firstNumberByKeys(source, ["drawMjCount", "draw_mj_count", "drawBalance", "drawingCount", "drawCount", "drawingPoints"]);
+  return `基础${base === null ? "未知" : base} / 高级${advanced === null ? "未知" : advanced} / 绘画${drawing === null ? "未知" : drawing}`;
+}
 function formatImyaiReward(result) {
   if (!result) {
     return "";
