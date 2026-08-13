@@ -156,8 +156,8 @@ async function signHashiqi() {
 
     // 3) 未签到时提交签到表单，并用 Honor.ashx 验证结果。
 
-    const qdViewstate = match(qiandao.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
-    const qdGenerator = match(qiandao.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
+    const qdViewstate = extractHiddenField(qiandao.body, "__VIEWSTATE");
+    const qdGenerator = extractHiddenField(qiandao.body, "__VIEWSTATEGENERATOR");
     if (!qdViewstate || !qdGenerator) {
       throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
     }
@@ -891,8 +891,8 @@ async function loginHashiqi(loginUrl, username, password) {
     method: "GET",
     jar: state.cookieJars.hashiqi,
   });
-  const viewstate = match(loginPage.body, /__VIEWSTATE[^>]+value="([^"]+)"/i);
-  const generator = match(loginPage.body, /__VIEWSTATEGENERATOR[^>]+value="([^"]+)"/i);
+  const viewstate = extractHiddenField(loginPage.body, "__VIEWSTATE");
+  const generator = extractHiddenField(loginPage.body, "__VIEWSTATEGENERATOR");
   if (!viewstate || !generator) {
     throw new Error("Hashiqi login page did not include VIEWSTATE fields");
   }
@@ -1065,6 +1065,23 @@ function findByKeys(obj, keys) {
   return undefined;
 }
 
+function extractHiddenField(html, fieldName) {
+  const text = String(html || "");
+  const inputTags = text.match(/<input\b[^>]*>/gi) || [];
+  const wanted = String(fieldName || "").toLowerCase();
+  for (const tag of inputTags) {
+    const name = match(tag, /\bname\s*=\s*["']([^"']+)["']/i).toLowerCase();
+    const id = match(tag, /\bid\s*=\s*["']([^"']+)["']/i).toLowerCase();
+    if (name !== wanted && id !== wanted) {
+      continue;
+    }
+    const value = match(tag, /\bvalue\s*=\s*["']([^"']*)["']/i);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
 function match(text, regex) {
   const found = regex.exec(String(text || ""));
   return found ? found[1] : "";
