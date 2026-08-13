@@ -438,6 +438,30 @@ async function signKingdee() {
   };
 }
 
+async function findLatestKingdeeLotteryRecord(activityId, headers, jar, attempts) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (attempt > 1) {
+      await sleep(500 * attempt);
+    }
+    try {
+      const records = await requestJson({
+        url: `${KINGDEE_VIP_BASE}/activityapi/me/activities/${activityId}/lottery-draw-records?page=0&pageSize=5&_=${Date.now()}_${attempt}`,
+        method: "GET",
+        headers,
+        jar,
+      });
+      const list = Array.isArray(records.content) ? records.content : (Array.isArray(records.data) ? records.data : []);
+      const today = todayString();
+      const found = list.find((item) => timestampDate(item.createdAt || item.createTime || item.drawTime) === today);
+      if (found) {
+        return found;
+      }
+    } catch (error) {
+      // A delayed record is non-fatal; the caller will return a clear pending result.
+    }
+  }
+  return null;
+}
 async function runKingdeeLottery(headers, jar) {
   try {
     await request({
@@ -490,9 +514,18 @@ async function runKingdeeLottery(headers, jar) {
       if (draw.errorCode) {
         return `draw failed: ${draw.message || draw.errorCode}`;
       }
-      const prize = draw.prize || (draw.data && draw.data.prize) || draw;
-      const name = prize.name || draw.prizeName || (draw.data && draw.data.prizeName) || "unknown prize";
-      const coins = Number(prize.coins || draw.coins || (draw.data && draw.data.coins) || 0);
+      let prize = draw.prize || (draw.data && draw.data.prize) || null;
+      let name = prize && (prize.name || prize.prizeName);
+      let coins = Number((prize && (prize.coins || prize.coin || prize.amount)) || draw.coins || draw.coin || draw.amount || (draw.data && (draw.data.coins || draw.data.coin || draw.data.amount)) || 0);
+      if (!name || !coins) {
+        const record = await findLatestKingdeeLotteryRecord(activityId, headers, jar, 4);
+        if (record) {
+          prize = record.prize || record.award || record;
+          name = name || (prize && (prize.name || prize.prizeName || prize.awardName || prize.title));
+          coins = coins || Number((prize && (prize.coins || prize.coin || prize.amount)) || record.coins || record.coin || record.amount || 0);
+        }
+      }
+      name = name || "抽奖结果待刷新";
       return coins > 0 ? `${name} (+${coins})` : name;
     }
 
