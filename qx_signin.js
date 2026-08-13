@@ -1000,9 +1000,9 @@ function isTruthyFlag(value) {
 
 function formatImyaiPoints(balance) {
   const source = balance && typeof balance === "object" ? balance : {};
-  const base = firstNumberByKeys(source, ["model3Count", "model3_count", "model3Balance", "basicCount", "baseCount", "basePoints"]);
-  const advanced = firstNumberByKeys(source, ["model4Count", "model4_count", "model4Balance", "advancedCount", "premiumCount", "advancedPoints"]);
-  const drawing = firstNumberByKeys(source, ["drawMjCount", "draw_mj_count", "drawBalance", "drawingCount", "drawCount", "drawingPoints"]);
+  const base = firstNumberByKeys(source, ["sumBasicPoints", "model3Count", "model3_count", "model3Balance", "basicCount", "baseCount", "basePoints"]);
+  const advanced = firstNumberByKeys(source, ["sumAdvancedPoints", "model4Count", "model4_count", "model4Balance", "advancedCount", "premiumCount", "advancedPoints"]);
+  const drawing = firstNumberByKeys(source, ["sumDrawingPoints", "drawMjCount", "draw_mj_count", "drawBalance", "drawingCount", "drawCount", "drawingPoints"]);
   return `基础${base === null ? "未知" : base} / 高级${advanced === null ? "未知" : advanced} / 绘画${drawing === null ? "未知" : drawing}`;
 }
 function formatImyaiReward(result) {
@@ -1033,9 +1033,9 @@ function formatImyaiReward(result) {
 
 function formatImyaiRewardDiff(beforeBalance, afterBalance) {
   const diffs = [
-    ["基础", numberDiff(beforeBalance && beforeBalance.model3Count, afterBalance && afterBalance.model3Count)],
-    ["高级", numberDiff(beforeBalance && beforeBalance.model4Count, afterBalance && afterBalance.model4Count)],
-    ["绘画", numberDiff(beforeBalance && beforeBalance.drawMjCount, afterBalance && afterBalance.drawMjCount)],
+    ["基础", numberDiff(firstNumberByKeys(beforeBalance, ["sumBasicPoints", "model3Count"]), firstNumberByKeys(afterBalance, ["sumBasicPoints", "model3Count"]))],
+    ["高级", numberDiff(firstNumberByKeys(beforeBalance, ["sumAdvancedPoints", "model4Count"]), firstNumberByKeys(afterBalance, ["sumAdvancedPoints", "model4Count"]))],
+    ["绘画", numberDiff(firstNumberByKeys(beforeBalance, ["sumDrawingPoints", "drawMjCount"]), firstNumberByKeys(afterBalance, ["sumDrawingPoints", "drawMjCount"]))],
   ];
   const parts = diffs
     .filter((item) => item[1] !== null && item[1] > 0)
