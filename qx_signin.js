@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Quantumult X daily sign-in runner.
  *
  * Tasks:
@@ -138,6 +138,28 @@ async function signHashiqi() {
     throw new Error("哈士奇签到页返回服务器错误：网站端 qiandao.aspx 当前异常");
   }
 
+  // Cookie 过期时 qiandao.aspx 返回 302 "Object moved" 页面，不含 VIEWSTATE 也不含登录表单。
+  // 检测这种情况并尝试用账号密码重新登录。
+  if (isHashiqiRedirectPage(qiandao.body) && username && password) {
+    warnLog("Hashiqi qiandao page returned redirect stub, cookie likely expired, re-login");
+    state.cookieJars.hashiqi = {};
+    setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+    await loginHashiqi(loginUrl, username, password);
+    qiandao = await request({
+      url: qiandaoUrl,
+      method: "GET",
+      jar: state.cookieJars.hashiqi,
+      headers: { Referer: loginUrl },
+    });
+    assertHashiqiAuthenticatedPage(qiandao.body);
+    if (isHashiqiRedirectPage(qiandao.body)) {
+      throw new Error("哈士奇重新登录后签到页仍返回重定向，请检查账号密码");
+    }
+  } else if (isHashiqiRedirectPage(qiandao.body)) {
+    setPref("QX_SIGNIN_HASHIQI_COOKIE", "");
+    throw new Error("哈士奇 Cookie 已过期：签到页返回重定向，请重新获取 Cookie 或配置账号密码");
+  }
+
   // 2) 页面可用后，再从 Honor.ashx 读取服务端真实签到状态。
   let honor = null;
   let honorError = null;
@@ -150,6 +172,7 @@ async function signHashiqi() {
   const signedBefore = isHashiqiSignedToday(honor);
   let signed = signedBefore;
   let reward = "";
+  let postReward = "";
   let lastSignError = null;
 
   if (!signedBefore) {
@@ -1175,6 +1198,11 @@ function describeError(error) {
   } catch (jsonError) {
     return String(error);
   }
+}
+
+function isHashiqiRedirectPage(body) {
+  const text = String(body || "");
+  return /Object moved to.*login\.aspx/i.test(text) || (/Object moved/i.test(text) && text.length < 500);
 }
 
 function isRedirectLoopError(error) {
