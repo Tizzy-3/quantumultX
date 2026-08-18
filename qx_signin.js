@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Quantumult X daily sign-in runner.
  *
  * Tasks:
@@ -137,6 +137,9 @@ async function signHashiqi() {
   if (/GenericErrorPage\.htm|Server Error|应用程序中的服务器错误/i.test(String(qiandao.body || ""))) {
     throw new Error("哈士奇签到页返回服务器错误：网站端 qiandao.aspx 当前异常");
   }
+  if (/维护|升级中|预计恢复时间|weihu|zz-main/i.test(String(qiandao.body || ""))) {
+    throw new Error("哈士奇签到页提示网站维护升级中，请稍后再试");
+  }
 
   // Cookie 过期时 qiandao.aspx 返回 302 "Object moved" 页面，不含 VIEWSTATE 也不含登录表单。
   // 检测这种情况并尝试用账号密码重新登录。
@@ -182,7 +185,42 @@ async function signHashiqi() {
     const qdViewstate = extractHiddenField(qiandao.body, "__VIEWSTATE");
     const qdGenerator = extractHiddenField(qiandao.body, "__VIEWSTATEGENERATOR");
     if (!qdViewstate || !qdGenerator) {
-      throw new Error("哈士奇签到页面解析失败：未找到 VIEWSTATE 字段");
+      // 新版页面可能不再输出 VIEWSTATE。先输出诊断，再尝试直接 postback。
+      const pageHint = String(qiandao.body || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      warnLog(`Hashiqi qiandao page missing VIEWSTATE. status=${qiandao.statusCode || qiandao.status || "?"} head=${pageHint}`);
+      let fallbackSigned = false;
+      let fallbackReward = "";
+      try {
+        const fallback = await request({
+          url: qiandaoUrl,
+          method: "POST",
+          jar: state.cookieJars.hashiqi,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+            Referer: qiandaoUrl,
+          },
+          body: formEncode({
+            __EVENTTARGET: "_lbtqd",
+            __EVENTARGUMENT: "",
+          }),
+        });
+        fallbackReward = extractHashiqiReward(fallback.body);
+        const fallbackHonor = await requestHashiqiHonor(qiandaoUrl);
+        fallbackSigned = isHashiqiSignedToday(fallbackHonor);
+        if (fallbackSigned) {
+          reward = extractHashiqiHonorReward(fallbackHonor) || fallbackReward || reward;
+        }
+      } catch (error) {
+        warnLog(`Hashiqi VIEWSTATE fallback failed: ${describeError(error)}`);
+      }
+      if (fallbackSigned || numberFromText(fallbackReward) > 0) {
+        signed = true;
+        postReward = fallbackReward;
+        lastSignError = null;
+      } else {
+        throw new Error(`哈士奇签到页面解析失败：未找到 VIEWSTATE 字段（页面片段：${pageHint}），网站可能已改版`);
+      }
     }
 
     const signResult = await request({
