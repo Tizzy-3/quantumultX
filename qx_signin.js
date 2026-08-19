@@ -1043,7 +1043,7 @@ async function requestHashiqiHonor(referer) {
       Referer: referer,
     },
     body: formEncode({
-      control: "list",
+      control: "list2",
       nowmonth: String(new Date().getMonth() + 1),
     }),
   });
@@ -1069,11 +1069,15 @@ function isHashiqiSignedToday(data) {
     return false;
   }
   if (Array.isArray(data.signedDates)) {
-    return data.signedDates.indexOf(todayString()) >= 0;
+    for (const item of data.signedDates) {
+      const day = item && typeof item === "object" ? item.signDay : item;
+      if (String(day) === todayString()) {
+        return true;
+      }
+    }
   }
   return false;
 }
-
 function extractHashiqiReward(body) {
   const text = String(body || "");
   return match(text, /today-reward[^>]*>\s*\+?(\d+)\s*狗粮/i) ||
