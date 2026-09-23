@@ -27,6 +27,8 @@ const USER_CONFIG = {
 
   // Leave this enabled unless your Quantumult X runtime already provides CryptoJS.
   CRYPTOJS_URL: "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js",
+  // pako (zlib in JS) is required to decode IMYAI slider-captcha PNG images.
+  PAKO_URL: "https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js",
   KINGDEE_PRODUCT_LINE_ID: "1",
 };
 
@@ -34,7 +36,7 @@ const HASHIQI_BASE = "https://www.haxiaohaios2.com/aspx3/mobile";
 const HASHIQI_SITE = "https://www.haxiaohaios2.com";
 const IMYAI_API_BASE = "https://api.daka.today/api";
 const KINGDEE_VIP_BASE = "https://vip.kingdee.com";
-const IMYAI_DEFAULT_REWARD = "基础+50 / 高级+5 / 绘画+5";
+const IMYAI_DEFAULT_REWARD = "基础+100 / 高级+5 / 绘画+5 / 智能体+10";
 
 const state = {
   cookieJars: {
@@ -335,28 +337,42 @@ async function signImyai() {
   let signedBefore = false;
   let consecutiveDays = 0;
   let todayReward = "";
+  // 2026-09 接口改名：/auth/getInfo -> /auth/get-info
   try {
-    const info = await requestJson({ url: `${IMYAI_API_BASE}/auth/getInfo`, method: "GET", headers });
+    const info = await requestJson({ url: `${IMYAI_API_BASE}/auth/get-info`, method: "GET", headers });
     before = info && info.data ? info.data : null;
     consecutiveDays = before && before.userInfo ? valueOf(before.userInfo.consecutiveDays, 0) : 0;
   } catch (error) {
-    warnLog(`IMYAI getInfo failed: ${error.message || error}`);
+    warnLog(`IMYAI get-info failed: ${error.message || error}`);
   }
 
+  // 2026-09 接口改名：/signin/signinLog -> /signin/signin-log
   try {
-    const log = await requestJson({ url: `${IMYAI_API_BASE}/signin/signinLog`, method: "GET", headers });
+    const log = await requestJson({ url: `${IMYAI_API_BASE}/signin/signin-log`, method: "GET", headers });
     const list = Array.isArray(log.data) ? log.data : [];
     const latest = list.length ? list[list.length - 1] : null;
     signedBefore = !!(latest && isTruthyFlag(latest.isSigned) && latest.signInDate === todayString());
     todayReward = formatImyaiReward(latest) || todayReward;
   } catch (error) {
-    warnLog(`IMYAI signinLog failed: ${error.message || error}`);
+    warnLog(`IMYAI signin-log failed: ${error.message || error}`);
   }
 
   let signStatus = signedBefore ? "Already signed" : "Signed";
   const beforeBalance = before && before.userBalance ? before.userBalance : {};
   if (!signedBefore) {
-    const body = JSON.stringify(encryptImyaiPayload({}));
+    // 2026-09 新增滑块验证码（captchaSliderEnable=1）：签到必须先过滑块拿 verificationToken。
+    let verificationToken = "";
+    let captchaError = "";
+    try {
+      verificationToken = await obtainImyaiVerificationToken(headers);
+    } catch (error) {
+      captchaError = describeError(error);
+      warnLog(`IMYAI slider captcha failed: ${captchaError}`);
+    }
+
+    const body = JSON.stringify(encryptImyaiPayload(
+      verificationToken ? { verificationToken } : {}
+    ));
     try {
       const signResult = await requestJson({
         url: `${IMYAI_API_BASE}/signin/sign`,
@@ -372,6 +388,8 @@ async function signImyai() {
         const msg = signResult.message || JSON.stringify(signResult).slice(0, 180);
         if (/已签|already|signed/i.test(msg)) {
           signStatus = "Already signed";
+        } else if (/验证|滑块|captcha/i.test(msg)) {
+          throw new Error(`需要滑块验证但未通过：${captchaError || msg}`);
         } else {
           throw new Error(msg);
         }
@@ -379,6 +397,9 @@ async function signImyai() {
         signStatus = "Already signed";
       }
     } catch (error) {
+      if (/HTTP 401|登录已失效|UNAUTHORIZED/.test(String(error.message || error))) {
+        throw new Error("IMYAI JWT 已失效，请在手机浏览器登录 super.imyaigc.com 重新抓取 Token");
+      }
       if (/已签|already|signed|400/.test(String(error))) {
         signStatus = "Already signed";
       } else {
@@ -389,11 +410,11 @@ async function signImyai() {
 
   let balance = beforeBalance;
   try {
-    const after = await requestJson({ url: `${IMYAI_API_BASE}/auth/getInfo`, method: "GET", headers });
+    const after = await requestJson({ url: `${IMYAI_API_BASE}/auth/get-info`, method: "GET", headers });
     balance = after && after.data && after.data.userBalance ? after.data.userBalance : balance;
     consecutiveDays = after && after.data && after.data.userInfo ? valueOf(after.data.userInfo.consecutiveDays, consecutiveDays) : consecutiveDays;
   } catch (error) {
-    warnLog(`IMYAI getInfo after sign failed: ${error.message || error}`);
+    warnLog(`IMYAI get-info after sign failed: ${error.message || error}`);
   }
 
   todayReward = todayReward || formatImyaiRewardDiff(beforeBalance, balance);
@@ -774,6 +795,282 @@ function encryptImyaiPayload(data) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// IMYAI slider captcha (added 2026-09: site now requires a block-puzzle captcha
+// before /signin/sign). Flow:
+//   POST /captcha/get  (encrypted) -> {token, bgImage, puzzleImage, puzzleY}
+//   detect hole x by matching the puzzle piece against the background
+//   POST /captcha/check (encrypted) {token, x} -> {verified, verificationToken}
+// ---------------------------------------------------------------------------
+
+async function ensurePako() {
+  if (typeof pako !== "undefined") {
+    return;
+  }
+  const url = config("PAKO_URL");
+  const cacheKey = `QX_SIGNIN_PAKO_CACHE_${simpleHash(url)}`;
+  const cached = pref(cacheKey);
+  if (cached) {
+    try {
+      globalEval(cached);
+      if (typeof pako !== "undefined") {
+        return;
+      }
+    } catch (error) {
+      warnLog(`pako cache invalid: ${error.message || error}`);
+    }
+    setPref(cacheKey, "");
+  }
+  if (!url) {
+    throw new Error("pako is required for IMYAI slider captcha");
+  }
+  const response = await request({ url, method: "GET" });
+  if (!response.body || response.body.length < 1000) {
+    throw new Error("failed to load pako");
+  }
+  setPref(cacheKey, response.body);
+  globalEval(response.body);
+  if (typeof pako === "undefined") {
+    throw new Error("pako loaded but global pako was not found");
+  }
+}
+
+function base64ToBytes(value) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const clean = String(value || "").replace(/[^A-Za-z0-9+/]/g, "");
+  const len = clean.length;
+  const pad = len % 4 === 2 ? 2 : len % 4 === 3 ? 1 : 0;
+  const usable = pad ? clean.slice(0, len - pad) : clean;
+  const bytes = new Uint8Array(Math.floor(usable.length * 3 / 4) + pad);
+  let out = 0;
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < usable.length; i += 1) {
+    buffer = (buffer << 6) | chars.indexOf(usable.charAt(i));
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[out++] = (buffer >> bits) & 0xff;
+    }
+  }
+  return bytes.subarray(0, out + pad);
+}
+
+function paethPredictor(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+}
+
+function readPngU32(bytes, offset) {
+  return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+}
+
+function decodePng(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < 8; i += 1) {
+    if (u8[i] !== signature[i]) {
+      throw new Error("IMYAI captcha image is not a PNG");
+    }
+  }
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  let colorType = 0;
+  const idat = [];
+  while (pos + 8 <= u8.length) {
+    const length = readPngU32(u8, pos);
+    const type = String.fromCharCode(u8[pos + 4], u8[pos + 5], u8[pos + 6], u8[pos + 7]);
+    const dataStart = pos + 8;
+    if (type === "IHDR") {
+      width = readPngU32(u8, dataStart);
+      height = readPngU32(u8, dataStart + 4);
+      const bitDepth = u8[dataStart + 8];
+      colorType = u8[dataStart + 9];
+      const interlace = u8[dataStart + 12];
+      if (bitDepth !== 8 || interlace !== 0) {
+        throw new Error(`unsupported PNG (bitDepth=${bitDepth}, interlace=${interlace})`);
+      }
+    } else if (type === "IDAT") {
+      idat.push(u8.slice(dataStart, dataStart + length));
+    } else if (type === "IEND") {
+      break;
+    }
+    pos = dataStart + length + 4;
+  }
+  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 0 ? 1 : 0;
+  if (!channels) {
+    throw new Error(`unsupported PNG color type ${colorType}`);
+  }
+  let compressed = idat[0];
+  for (let i = 1; i < idat.length; i += 1) {
+    const merged = new Uint8Array(compressed.length + idat[i].length);
+    merged.set(compressed);
+    merged.set(idat[i], compressed.length);
+    compressed = merged;
+  }
+  const raw = pako.inflate(compressed);
+  const stride = width * channels;
+  const out = new Uint8Array(height * stride);
+  let prevRow = new Uint8Array(stride);
+  let rawPos = 0;
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[rawPos];
+    rawPos += 1;
+    const rowStart = y * stride;
+    for (let i = 0; i < stride; i += 1) {
+      const a = i >= channels ? out[rowStart + i - channels] : 0;
+      const b = prevRow[i];
+      const c = i >= channels ? prevRow[i - channels] : 0;
+      let value = raw[rawPos + i];
+      if (filter === 1) {
+        value = (value + a) & 0xff;
+      } else if (filter === 2) {
+        value = (value + b) & 0xff;
+      } else if (filter === 3) {
+        value = (value + ((a + b) >> 1)) & 0xff;
+      } else if (filter === 4) {
+        value = (value + paethPredictor(a, b, c)) & 0xff;
+      }
+      out[rowStart + i] = value & 0xff;
+    }
+    prevRow = out.subarray(rowStart, rowStart + stride);
+    rawPos += stride;
+  }
+  return { width, height, channels, data: out };
+}
+
+function pngToGray(png) {
+  const { width, height, channels, data } = png;
+  const gray = new Float64Array(width * height);
+  const alpha = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i += 1) {
+    const o = i * channels;
+    gray[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+    alpha[i] = channels === 4 ? data[o + 3] : 255;
+  }
+  return { gray, alpha, width, height };
+}
+
+// Locate the hole x-offset: slide the puzzle piece over the background at the
+// given y, score each position by normalized cross-correlation of horizontal
+// gradients (robust to the darkening overlay the server applies to the hole).
+function solveSliderHole(bgPng, puzzlePng, holeY) {
+  const bg = pngToGray(bgPng);
+  const pz = pngToGray(puzzlePng);
+  const W = bg.width;
+  const H = bg.height;
+  const pw = pz.width;
+  const ph = pz.height;
+  if (W < pw || H < ph) {
+    throw new Error(`captcha size mismatch bg=${W}x${H} piece=${pw}x${ph}`);
+  }
+  const maskIdx = [];
+  for (let y = 0; y < ph; y += 1) {
+    for (let x = 0; x < pw; x += 1) {
+      if (pz.alpha[y * pw + x] > 40) {
+        maskIdx.push(y * pw + x);
+      }
+    }
+  }
+  if (!maskIdx.length) {
+    throw new Error("puzzle piece is fully transparent");
+  }
+  const pieceGray = pz.gray;
+  const pieceDx = new Float64Array(pw * ph);
+  for (let i = 0; i < maskIdx.length; i += 1) {
+    const idx = maskIdx[i];
+    const x = idx % pw;
+    if (x + 1 < pw && pz.alpha[idx + 1] > 40) {
+      pieceDx[idx] = pieceGray[idx + 1] - pieceGray[idx];
+    }
+  }
+  const bgGray = bg.gray;
+  const bgDx = new Float64Array(W * H);
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 1; x < W; x += 1) {
+      bgDx[y * W + x] = bgGray[y * W + x] - bgGray[y * W + x - 1];
+    }
+  }
+  const y0 = Math.max(0, Math.min(Number(holeY) || 0, H - ph));
+  // Map each masked piece pixel to its background pixel (per candidate x:
+  // bg offset = (y0 + py) * W + x + px).
+  const maskBgBase = [];
+  for (let i = 0; i < maskIdx.length; i += 1) {
+    const idx = maskIdx[i];
+    maskBgBase.push((y0 + Math.floor(idx / pw)) * W + (idx % pw));
+  }
+  let bestX = 0;
+  let bestScore = -Infinity;
+  for (let x = 0; x + pw <= W; x += 1) {
+    let sumA = 0;
+    let sumB = 0;
+    for (let i = 0; i < maskIdx.length; i += 1) {
+      sumA += pieceDx[maskIdx[i]];
+      sumB += bgDx[maskBgBase[i] + x];
+    }
+    const meanA = sumA / maskIdx.length;
+    const meanB = sumB / maskIdx.length;
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < maskIdx.length; i += 1) {
+      const a = pieceDx[maskIdx[i]] - meanA;
+      const b = bgDx[maskBgBase[i] + x] - meanB;
+      dot += a * b;
+      normA += a * a;
+      normB += b * b;
+    }
+    const score = dot / (Math.sqrt(normA * normB) + 1e-9);
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = x;
+    }
+  }
+  warnLog(`IMYAI slider hole: x=${bestX} y=${y0} score=${Number(bestScore).toFixed(3)}`);
+  return bestX;
+}
+
+async function obtainImyaiVerificationToken(headers) {
+  await ensurePako();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    if (attempt > 1) {
+      await sleep(500 * attempt);
+    }
+    const cap = await requestJson({
+      url: `${IMYAI_API_BASE}/captcha/get`,
+      method: "POST",
+      headers,
+      body: JSON.stringify(encryptImyaiPayload({ captchaType: "blockPuzzle" })),
+    });
+    const data = cap && cap.data;
+    if (!data || !data.token || !data.bgImage || !data.puzzleImage) {
+      throw new Error(`captcha/get 响应异常: ${JSON.stringify(cap).slice(0, 180)}`);
+    }
+    const bgPng = decodePng(base64ToBytes(String(data.bgImage).split(",").pop()));
+    const puzzlePng = decodePng(base64ToBytes(String(data.puzzleImage).split(",").pop()));
+    const x = solveSliderHole(bgPng, puzzlePng, Number(data.puzzleY) || 0);
+    // Behave like a human dragging the slider.
+    await sleep(600 + Math.floor(Math.random() * 900));
+    const check = await requestJson({
+      url: `${IMYAI_API_BASE}/captcha/check`,
+      method: "POST",
+      headers,
+      body: JSON.stringify(encryptImyaiPayload({ token: data.token, x })),
+    });
+    const checkData = check && check.data;
+    if (checkData && checkData.verified && checkData.verificationToken) {
+      return checkData.verificationToken;
+    }
+    warnLog(`IMYAI captcha check attempt ${attempt} not verified (x=${x}): ${JSON.stringify(check).slice(0, 180)}`);
+  }
+  throw new Error("滑块验证 3 次尝试均未通过");
+}
+
+
 async function requestJson(options) {
   const response = await request(options);
   try {
@@ -1098,10 +1395,19 @@ function isTruthyFlag(value) {
 
 function formatImyaiPoints(balance) {
   const source = balance && typeof balance === "object" ? balance : {};
-  const base = firstNumberByKeys(source, ["sumBasicPoints", "model3Count", "model3_count", "model3Balance", "basicCount", "baseCount", "basePoints"]);
-  const advanced = firstNumberByKeys(source, ["sumAdvancedPoints", "model4Count", "model4_count", "model4Balance", "advancedCount", "premiumCount", "advancedPoints"]);
-  const drawing = firstNumberByKeys(source, ["sumDrawingPoints", "drawMjCount", "draw_mj_count", "drawBalance", "drawingCount", "drawCount", "drawingPoints"]);
-  return `基础${base === null ? "未知" : base} / 高级${advanced === null ? "未知" : advanced} / 绘画${drawing === null ? "未知" : drawing}`;
+  const base = firstNumberByKeys(source, ["sumBasicPoints", "basicPoints", "model3Count", "model3_count", "model3Balance", "basicCount", "baseCount", "basePoints"]);
+  const advanced = firstNumberByKeys(source, ["sumAdvancedPoints", "advancedPoints", "model4Count", "model4_count", "model4Balance", "advancedCount", "premiumCount", "advancedPoints"]);
+  const drawing = firstNumberByKeys(source, ["sumDrawingPoints", "drawingPoints", "drawMjCount", "draw_mj_count", "drawBalance", "drawingCount", "drawCount", "drawingPoints"]);
+  const agent = firstNumberByKeys(source, ["agentPoints", "sumAgentPoints"]);
+  const parts = [
+    `基础${base === null ? "未知" : base}`,
+    `高级${advanced === null ? "未知" : advanced}`,
+    `绘画${drawing === null ? "未知" : drawing}`,
+  ];
+  if (agent !== null) {
+    parts.push(`智能体${agent}`);
+  }
+  return parts.join(" / ");
 }
 function formatImyaiReward(result) {
   if (!result) {
@@ -1131,11 +1437,13 @@ function formatImyaiReward(result) {
 
 function formatImyaiRewardDiff(beforeBalance, afterBalance) {
   const diffs = [
-    ["基础", numberDiff(firstNumberByKeys(beforeBalance, ["sumBasicPoints", "model3Count"]), firstNumberByKeys(afterBalance, ["sumBasicPoints", "model3Count"]))],
-    ["高级", numberDiff(firstNumberByKeys(beforeBalance, ["sumAdvancedPoints", "model4Count"]), firstNumberByKeys(afterBalance, ["sumAdvancedPoints", "model4Count"]))],
-    ["绘画", numberDiff(firstNumberByKeys(beforeBalance, ["sumDrawingPoints", "drawMjCount"]), firstNumberByKeys(afterBalance, ["sumDrawingPoints", "drawMjCount"]))],
+    ["基础", firstNumberByKeys(beforeBalance, ["sumBasicPoints", "basicPoints", "model3Count"]), firstNumberByKeys(afterBalance, ["sumBasicPoints", "basicPoints", "model3Count"])],
+    ["高级", firstNumberByKeys(beforeBalance, ["sumAdvancedPoints", "advancedPoints", "model4Count"]), firstNumberByKeys(afterBalance, ["sumAdvancedPoints", "advancedPoints", "model4Count"])],
+    ["绘画", firstNumberByKeys(beforeBalance, ["sumDrawingPoints", "drawingPoints", "drawMjCount"]), firstNumberByKeys(afterBalance, ["sumDrawingPoints", "drawingPoints", "drawMjCount"])],
+    ["智能体", firstNumberByKeys(beforeBalance, ["agentPoints", "sumAgentPoints"]), firstNumberByKeys(afterBalance, ["agentPoints", "sumAgentPoints"])],
   ];
   const parts = diffs
+    .map((item) => [item[0], numberDiff(item[1], item[2])])
     .filter((item) => item[1] !== null && item[1] > 0)
     .map((item) => `${item[0]}+${item[1]}`);
   return parts.join(" / ");
